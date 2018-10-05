@@ -1,0 +1,10 @@
+#Folder to store sysinfos and backups
+BASEFOLDER="/backup/sysinfos/" #include / at the end!
+
+#How long are sysinfos kept on the filesystem
+KEEPDAYS=30
+
+#Nextcloud connection
+USER_NEXTCLOUD=USERNAME
+PASSWORD_NEXTCLOUD=PASSWORD
+NEXTCLOUD_UPLOAD_URL=https://YOUR.NEXTCLOUD.SERVER/remote.php/webdav/

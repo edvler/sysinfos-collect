@@ -1,0 +1,106 @@
+#!/bin/bash
+
+. /etc/sysinfos-collect/config
+
+DATE=$(date +%Y%m%d_%H%M%S_%N)
+#BASEFOLDER="/backup02/offsite/sysinfos/" #include / at the end!
+#KEEPDAYS=30
+
+INFOPATH=$BASEFOLDER$DATE/infos
+BACKUPPATH=$BASEFOLDER$DATE/backup
+
+mkdir -p $INFOPATH
+mkdir -p $BACKUPPATH
+
+#Check if folders are created
+if [ ! -d "$INFOPATH" ]; then
+	echo "Path $INFOPATH does not exist"
+	exit 1
+fi
+
+if [ ! -d "$BACKUPPATH" ]; then
+	echo "Path $BACKUPPATH does not exist"
+	exit 1
+fi
+
+hostname -A > $INFOPATH/hostname
+
+pveversion --verbose >  $INFOPATH/pveversion
+
+lsblk --all --output NAME,KNAME,MAJ:MiN,SIZE,TYPE,MOUNTPOINT,FSTYPE,MODEL,SERIAL,WWN,REV > $INFOPATH/lsblk
+
+vgs -a > $INFOPATH/vgs
+vgdisplay > $INFOPATH/vgdisplay
+
+lvs -a > $INFOPATH/lvs
+lvdisplay > $INFOPATH/lvdisplay
+
+zpool list > $INFOPATH/zpool_list
+zpool status > $INFOPATH/zpool_status
+zfs list -t all > $INFOPATH/zfs_list
+zfs get all > $INFOPATH/zfs_get_all
+
+df -h > $INFOPATH/df-h
+df -i > $INFOPATH/df-i
+
+smartctl --scan > $INFOPATH/smartctl-scan
+
+
+smart_drives=( $(smartctl --scan | awk '{print $1}') )
+for smart_drive in "${smart_drives[@]}"; do
+		echo "smartctl -a $smart_drive" >> $INFOPATH/smartctl
+		smartctl -a $smart_drive >> $INFOPATH/smartctl 
+done
+
+cat /proc/cpuinfo > $INFOPATH/cpuinfo
+cat /proc/meminfo > $INFOPATH/meminfo
+
+lshw -quiet > $INFOPATH/lshw
+
+dmesg -T > $INFOPATH/dmesg
+
+crontab -l > $INFOPATH/crontab_root 2>&1
+
+PVEPATH=$BACKUPPATH/pve
+mkdir -p $PVEPATH
+cp -r /etc/pve/* $PVEPATH
+
+VZDUMP=$BACKUPPATH/vzdump
+mkdir -p $VZDUMP
+cp -r /var/log/vzdump/* $VZDUMP
+
+POSTFIX=$BACKUPPATH/postfix
+mkdir -p $POSTFIX
+cp -r /etc/postfix/* $POSTFIX
+
+APCUPSD=$BACKUPPATH/apcupsd
+mkdir -p $APCUPSD
+cp -r /etc/apcupsd/* $APCUPSD
+
+NETWORK=$BACKUPPATH/network
+mkdir -p $NETWORK
+cp -r /etc/network/* $NETWORK
+
+cp -r /var/log/syslog* $INFOPATH
+cp -r /var/log/messages* $INFOPATH
+
+tar -c -z -f $BASEFOLDER$DATE.tar.gz $BASEFOLDER$DATE
+
+i=0
+while [ $i -le $KEEPDAYS ]
+do
+	D=`date -d "- $i days" +%Y%m%d`
+	KEEP="$KEEP -e $D"
+	((i++))
+done
+
+cd $BASEFOLDER
+
+if [ "$?" -eq "0" ]; then
+ls --almost-all --format=single-column $BASEFOLDER |
+	grep "20[0-9]*_[0-2][0-9]*_[0-9]*" |
+        grep -v $KEEP |
+xargs rm -rf
+fi
+
+curl --user "$USER_NEXTCLOUD:$PASSWORD_NEXTCLOUD" -T "$BASEFOLDER$DATE.tar.gz" $NEXTCLOUD_UPLOAD_URL
